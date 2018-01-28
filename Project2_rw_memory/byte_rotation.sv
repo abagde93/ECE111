@@ -11,6 +11,7 @@ module byte_rotation(input logic clk, reset_n, start,
  logic [31:0] read_data;
  //logic [31:0] write_data;
  logic [31:0] num_words;
+ logic [7:0] counter;
  
 function logic [31:0] byte_rotate(input logic [31:0] value);
  byte_rotate = {value[23:16], value[15:8], value[7:0], value[31:24]};
@@ -30,13 +31,15 @@ endfunction
 	  case (state)
       IDLE: 
  		 if (start) begin
+		      counter <= 0;
 		      state <= READ_1;        
        end 
 		
 		 
 		READ_1: begin
 		   $display("IN READ_1");
-			mem_addr <= message_addr[15:0];
+			$display("Counter is: %x", counter);
+			mem_addr <= message_addr[15:0] + counter;
 			$display(mem_addr);
 			mem_we <= 0;
 			state <= READ_2;
@@ -61,7 +64,7 @@ endfunction
 				num_words <= (size >> 4);
 				read_data <= mem_read_data;
 				$display(read_data);
-				mem_addr <= output_addr[15:0];
+				mem_addr <= output_addr[15:0] + counter;
 				state <= WRITE_2;
 		 end
 		
@@ -81,8 +84,16 @@ endfunction
 		 if(mem_we) begin
 		      mem_we <= 0;
 				$display("mem_write_data: %x", mem_write_data);
-				done <= 1;
+				counter <= counter + 1;
+				
+				if(counter > 14) begin
+					done <= 1;
+				end
+				
+				state <= READ_1;
 		 end
+		 
+	
 		
 	  endcase     
       
