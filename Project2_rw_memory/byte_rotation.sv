@@ -9,14 +9,18 @@ module byte_rotation(input logic clk, reset_n, start,
  
  assign mem_clk = clk;
  logic [31:0] read_data;
- //logic [31:0] write_data;
  logic [31:0] num_words;
- logic [7:0] counter;
+ logic [5:0] counter;
+ 
+ //size is the # of bytes read from memory, not number of words in the list. 
+ //We can't assume the size of the list, but we are given the rule that it will be
+ //some multiple of 4 bytes
+ assign num_words = size/4;
+ 
  
 function logic [31:0] byte_rotate(input logic [31:0] value);
  byte_rotate = {value[23:16], value[15:8], value[7:0], value[31:24]};
 endfunction
-
 
 
  
@@ -38,9 +42,9 @@ endfunction
 		 
 		READ_1: begin
 		   $display("IN READ_1");
-			$display("Counter is: %x", counter);
+			$display("Counter is: %d", counter);
 			mem_addr <= message_addr[15:0] + counter;
-			$display(mem_addr);
+			//$display(mem_addr);
 			mem_we <= 0;
 			state <= READ_2;
 		end
@@ -61,7 +65,7 @@ endfunction
 		WRITE_1: 
 		 if(mem_we) begin
 		      $display("IN WRITE_1, setting address");
-				num_words <= (size >> 4);
+				//num_words <= (size >> 4);
 				read_data <= mem_read_data;
 				$display(read_data);
 				mem_addr <= output_addr[15:0] + counter;
@@ -72,7 +76,6 @@ endfunction
 		WRITE_2:
 		 if(mem_we) begin
 		      $display("IN WRITE_2, doing rotation");
-				//read_data <= mem_read_data;
 				$display("read_data: %x", read_data);
 				$display("num_words: %x", num_words);
 				mem_write_data <= byte_rotate(read_data);
@@ -86,7 +89,7 @@ endfunction
 				$display("mem_write_data: %x", mem_write_data);
 				counter <= counter + 1;
 				
-				if(counter > 14) begin
+				if(counter >= (num_words-1)) begin
 					done <= 1;
 				end
 				
