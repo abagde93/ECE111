@@ -105,6 +105,7 @@ begin
 
     $display("-----------\n");
     $display("Messagetext\n");
+	 $display(message_size);
     $display("-----------\n");
 
     dpsram[message_addr+0] = message_seed;

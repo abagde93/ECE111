@@ -12,12 +12,9 @@ logic [3:0] counter;
 logic [31:0] read_data;
 enum logic [2:0] {IDLE=3'b000, STEP1=3'b001, STEP2=3'b010, STEP3=3'b011, STEP4=3'b100, DONE=3'b101} state;
 
-/*logic   [255:0] sha256_hash; // results here
+logic   [255:0] sha256_hash; // results here
 
-logic   [31:0] dpsram[0:16383]; // each row has 32 bits
-logic   [31:0] dpsram_tb[0:16383]; // for result testing, testbench only
 
-logic   [31:0] message_seed = 32'h01234567; // modify message_seed to test your design
 
 int             message_size = 120; // in bytes // change this number to test your design
 int             pad_length;
@@ -62,12 +59,37 @@ parameter int sha256_k[0:63] = '{
 	h6 = 32'h1f83d9ab;
 	h7 = 32'h5be0cd19;
 	
+	//Initial message digest
+	sha256_digest = {h0, h1, h2, h3, h4, h5, h6, h7};
+	
+	// INITIAL HASH AT ROUND K
+
+   a = h0;
+   b = h1;
+   c = h2;
+   d = h3;
+   e = h4;
+   f = h5;
+   g = h6;
+   h = h7;
+	
+	//There are 64 processing rounds per block, m is number of blocks
+	//w[0] --> w[15] will just be the 16 32-bit words respectively
+	//The rest of the w[t]'s will be calculated with the below formula
+	
+	//Asked question on piazza about padding. You do not need to read in all the words for
+	//a block and then do processing.
+	
+	//"you can store mem_read_data/pad for t=0 to t=15, all the while we do {a,b,c,d,e,f,g} <= ... 
+	//There are multiple ways to fill in ... but you do not need to fill in w[0] to w[15] all at once to fill it in
+   //One way to pad on the fly is catch the last word with an if(last_word) and use something like the case statement in lecture 7 last slide."
+	
 	for (m = 0; m < outloop; m = m + 1) begin
         // W ARRAY EXPANSION
 
         for (t = 0; t < 64; t = t + 1) begin
             if (t < 16) begin
-                w[t] = dpsram_tb[t+m*16];
+                w[t] = //32-bit word;
             end else begin
                 s0 = rightrotate(w[t-15], 7) ^ rightrotate(w[t-15], 18) ^ (w[t-15] >> 3);
                 s1 = rightrotate(w[t-2], 17) ^ rightrotate(w[t-2], 19) ^ (w[t-2] >> 10);
@@ -75,84 +97,47 @@ parameter int sha256_k[0:63] = '{
             end
         end
 
-        // INITIAL HASH AT ROUND K
+        
 
-        a = h0;
-        b = h1;
-        c = h2;
-        d = h3;
-        e = h4;
-        f = h5;
-        g = h6;
-        h = h7;
+// HASH ROUNDS
+//Actually need to implement the "sha256_op" function
+function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w,
+                                 input logic [7:0] t);
 
-        // HASH ROUNDS
+logic [31:0] S1, S0, ch, maj, t1, t2; // internal signals
+begin
+    S1 = rightrotate(e, 6) ^ rightrotate(e, 11) ^ rightrotate(e, 25);
+    ch = (e & f) ^ ((~e) & g);
+    t1 = h + S1 + ch + sha256_k[t] + w;
+    S0 = rightrotate(a, 2) ^ rightrotate(a, 13) ^ rightrotate(a, 22);
+    maj = (a & b) ^ (a & c) ^ (b & c);
+    t2 = S0 + maj;
+
+    sha256_op = {t1 + t2, a, b, c, d + t1, e, f, g};
+end
+endfunction
+
 
         for (t = 0; t < 64; t = t + 1) begin
             {a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[t], t);
+				
+				// FINAL HASH
+
+				h0 = h0 + a;
+				h1 = h1 + b;
+				h2 = h2 + c;
+				h3 = h3 + d;
+				h4 = h4 + e;
+				h5 = h5 + f;
+				h6 = h6 + g;
+				h7 = h7 + h;
         end
 
-        // FINAL HASH
-
-        h0 = h0 + a;
-        h1 = h1 + b;
-        h2 = h2 + c;
-        h3 = h3 + d;
-        h4 = h4 + e;
-        h5 = h5 + f;
-        h6 = h6 + g;
-        h7 = h7 + h;
 	end
 	 
-	sha256_digest = {h0, h1, h2, h3, h4, h5, h6, h7};*/
+	sha256_digest = {h0, h1, h2, h3, h4, h5, h6, h7};
 		
-	/*always_ff @(posedge clk, negedge reset_n)
-	begin
-		if(!reset_n) begin
-			state <= IDLE;
-		end
-		else begin
-			case(state)
-				IDLE:
-					if (start) begin
-						counter <= 0;
-						state <= READ_1;        
-					end
-				//add more cases
-				READ_1: begin
-					mem_addr <= message_addr[15:0] + counter;
-					mem_we <= 0;
-					state <= READ_2;
-				end
-				
-				READ_2:
-					if(!mem_we) begin
-						//$display("in read2");
-						mem_we <= 1;
-						state <= WRITE_1;
-					end
-					
-				WRITE_1:
-					if(mem_we) begin
-						//$display("IN WRITE_1, setting address");
-						//num_words <= (size >> 4);
-						read_data <= mem_read_data;
-						//$display(read_data);
-						counter <= counter + 1;
-						//mem_addr <= output_addr[15:0] + counter;
-						//state <= WRITE_2;
-						state <= WRITE_2;
-					end
-				WRITE_2: begin
-					$display("In Write 2 displaying read_data");
-					//$display(read_data);
-					state <= READ_1;
-				end
-	
-			 endcase
-		end
 
-	end//end ff block*/
 logic [15:0] rc, wc; // read and write counters
 
   // byte rotation
@@ -188,30 +173,22 @@ logic [15:0] rc, wc; // read and write counters
           rc <= rc + 1;
           state <= STEP3;
         end
-      STEP3: begin // WRITE 0
+      
+		// READ 3, data on mem_read_data is available to use
+		//mem_read_data just contains a 32 bit message
+		STEP3: begin 
           mem_we <= 1;
           mem_addr <= output_addr + wc;
 			 $display("STEP 3");
-			 $display("%h, %b, %d, %x\n", mem_read_data,mem_read_data, mem_read_data, mem_read_data);
-          mem_write_data <= byte_rotate(mem_read_data);
-          wc <= wc + 1;
-          if ((wc + 1) < (size >> 2)) begin
-              state <= STEP4;
-          end else begin
-              state <= DONE;
-          end
-        end
-      STEP4: begin // WRITE 1
-          mem_we <= 1;
-          mem_addr <= output_addr + wc;
-          mem_write_data <= byte_rotate(mem_read_data);
-          wc <= wc + 1;
-          if ((wc + 1) < (size >>2)) begin
+			 $display("%x\n", mem_read_data);
+          
+          if ((rc) < (size >> 2)) begin
               state <= STEP1;
           end else begin
               state <= DONE;
           end
         end
+      
       DONE: begin
           done <= 1;
           state <= IDLE;
