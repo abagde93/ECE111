@@ -200,11 +200,11 @@ endfunction
 		      $display("***In STEP5***");
 				if(j < 64) begin
 					{a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[t], t);
+					state <= STEP5;
 				end else begin
 					state <= STEP6;
 				end
 				j <= j + 1;
-				state <= STEP5;
 		  end
 		  
 		  STEP6: begin
@@ -233,7 +233,7 @@ endfunction
 		  
       DONE: begin
 		    $display("Printing sha256_digest here");
-			 $display("%p", sha256_digest);
+			 $display("%x", sha256_digest);
           done <= 1;
           state <= IDLE;
         end
