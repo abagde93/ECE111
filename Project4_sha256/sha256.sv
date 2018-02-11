@@ -10,7 +10,7 @@ logic [31:0] num_words;
 assign num_words = size/4;
 logic [3:0] counter;
 logic [31:0] read_data;
-enum logic [2:0] {IDLE=3'b000, STEP1=3'b001, STEP2=3'b010, STEP3=3'b011, STEP4=3'b100, STEP5=3'b101, STEP6=3'b110 DONE=3'b111} state;
+enum logic [2:0] {IDLE=3'b000, STEP1=3'b001, STEP2=3'b010, STEP3=3'b011, STEP4=3'b100, STEP5=3'b101, STEP6=3'b110, DONE=3'b111} state;
 
 logic   [255:0] sha256_hash; // results here
 
@@ -40,9 +40,9 @@ logic   [31:0] w[0:63];
 
 logic [15:0] rc, wc; // read and write counters
 
-logic [15:0] current_block[31:0]; //
-logic [15:0] temp_block[31:0];
-logic [15:0] last_block[31:0];
+logic [31:0] current_block[15:0]; //
+logic [31:0] temp_block[15:0];
+logic [31:0] last_block[15:0];
 
 
 parameter int sha256_k[0:63] = '{
@@ -91,7 +91,8 @@ endfunction
 
   assign mem_clk = clk;
   assign pad_length = 512 - (((size * 8) + 65) % 512); // # of zeroes required for padding to fit into 512 block
-  assign total_length = (size * 8) + 65 + pad_length; // the total length of the message with delimiter and padded zeroes and size. NOTE: should always be a multiple of 512
+  logic [31:0] total_length;
+  //assign total_length = (size * 8) + 65 + pad_length; // the total length of the message with delimiter and padded zeroes and size. NOTE: should always be a multiple of 512
 
   always_ff @(posedge clk, negedge reset_n)
   begin
@@ -101,6 +102,8 @@ endfunction
       case (state)
       IDLE: // start
           if (start) begin 
+			   total_length <= (size * 8) + 65 + pad_length;
+				
 				h0 <= 32'h6a09e667;
 				h1 <= 32'hbb67ae85;
 				h2 <= 32'h3c6ef372;
@@ -115,11 +118,13 @@ endfunction
             state <= STEP2;
           end
       STEP1: begin // READ 0
+		    
           mem_we <= 0;
           mem_addr <= message_addr + rc;
           state <= STEP2;
         end
       STEP2: begin // READ 1
+		    $display("total length %d", total_length);
           mem_we <= 0;
           //mem_addr <= message_addr + rc;
           rc <= rc + 1;
@@ -139,20 +144,21 @@ endfunction
 				//last_block[14] = size << 3
 				//last_block[15] = size << 3
 			 end
-			 if(/*iflastword do stuff*/)begin
-				//case:
-			 end
+//			 if(/*iflastword do stuff*/)begin
+//				//case:
+//			 end
 			
+			//If current block is not full of 16 words, go back to STEP1 to get mem_addr of next word
 			 if (i < 16) begin
 				current_block[i] <= mem_read_data;
+				 i <= i + 1;
+				state <= STEP1;
 			 end else begin
-;
 				i = 0; //reset word count counter
 				temp_block[15:0] <= current_block[15:0]; //move fully completed block of ONLY words into a temporary variable
 				state <= STEP4;
 			 end
 					
-			 i <= i + 1;
 					
 
           //if(processing completed) begin
@@ -161,6 +167,8 @@ endfunction
         end
 		  
 		  STEP4: begin
+		      $display("***In STEP4***");
+				$display("Temp block is: %p", temp_block);
 				if (t < 16) begin
 					w[t] <= temp_block[t];
 				end else begin
@@ -203,6 +211,9 @@ endfunction
 					h5 <= h5 + f;
 					h6 <= h6 + g;
 					h7 <= h7 + h;
+					
+					//Increment m since at this portion we know we have finished processing a block
+					m <= m + 1;
 					state <= STEP1;
 				end else begin
 					sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
@@ -211,7 +222,7 @@ endfunction
 		  end
 		  
       DONE: begin
-		    $display("Printing W array here, should be 64 32-bit words WORKED");
+		    $display("Printing sha256_digest here");
 			 $display("%p", w);
           done <= 1;
           state <= IDLE;
