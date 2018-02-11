@@ -8,6 +8,7 @@ module sha256(input logic clk, reset_n, start,
 
 logic [31:0] num_words;
 assign num_words = size/4;
+
 logic [3:0] counter;
 logic [31:0] read_data;
 enum logic [2:0] {IDLE=3'b000, STEP1=3'b001, STEP2=3'b010, STEP3=3'b011, STEP4=3'b100, STEP5=3'b101, STEP6=3'b110, DONE=3'b111} state;
@@ -125,6 +126,7 @@ endfunction
         end
       STEP2: begin // READ 1
 		    $display("total length %d", total_length);
+			 $display("PROCESSING BLOCK %d", m);
           mem_we <= 0;
           //mem_addr <= message_addr + rc;
           rc <= rc + 1;
@@ -136,6 +138,7 @@ endfunction
 		STEP3: begin 
           mem_we <= 1;
 			 $display("STEP 3");
+			 $display("num words: %d", num_words);
 			 $display("%d\n", mem_read_data);
 			 $display(rc);
 			 
@@ -144,9 +147,16 @@ endfunction
 				//last_block[14] = size << 3
 				//last_block[15] = size << 3
 			 end
-//			 if(/*iflastword do stuff*/)begin
-//				//case:
-//			 end
+			 
+			 //Check for last word. 
+			 if(rc == num_words)begin
+				case(message_size % 4)
+				0: current_block[i] <= 32'h80000000;
+				1: current_block[i] <= mem_read_data & 32'hFF000000 | 32'h00800000;
+				2: current_block[i] <= mem_read_data & 32'hFFFF0000 | 32'h00008000;
+				3: current_block[i] <= mem_read_data & 32'hFFFFFF00 | 32'h00000080;
+				endcase
+			 end
 			
 			//If current block is not full of 16 words, go back to STEP1 to get mem_addr of next word
 			 if (i < 16) begin
@@ -191,6 +201,8 @@ endfunction
 					g <= h6;
 					h <= h7;
 					
+					//Reset t to 0 in preperation for the next block
+					t <= 0;
 					state <= STEP5;
 					
 				end
@@ -209,7 +221,7 @@ endfunction
 		  
 		  STEP6: begin
 		      $display("***In STEP6***");
-				if(m != total_length / 512) begin
+				if(m != (total_length / 512) -1) begin		//The "-1" is because m starts at block 0
 					h0 <= h0 + a;
 					h1 <= h1 + b;
 					h2 <= h2 + c;
@@ -220,11 +232,11 @@ endfunction
 					h7 <= h7 + h;
 					
 					//Increment m since at this portion we know we have finished processing a block
-					//m <= m + 1;
-					//state <= STEP1;
+					m <= m + 1;
+					state <= STEP1;
 					
-					sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
-					state <= DONE;
+					//sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
+					//state <= DONE;
 				end else begin
 					sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
 					state <= DONE;
