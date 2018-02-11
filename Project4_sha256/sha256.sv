@@ -169,14 +169,18 @@ endfunction
 		  STEP4: begin
 		      $display("***In STEP4***");
 				$display("Temp block is: %p", temp_block);
+				
 				if (t < 16) begin
 					w[t] <= temp_block[t];
+					state <= STEP4;
 				end else begin
 					w[t] <= wtnew;
+					state <= STEP4;
 				end
 				t <= t + 1;
-				state <= STEP4;
 				
+				
+				$display("t is %d", t);
 				if(t == 63) begin
 					a <= h0;
 					b <= h1;
@@ -187,11 +191,13 @@ endfunction
 					g <= h6;
 					h <= h7;
 					
+					state <= STEP5;
+					
 				end
-				state <= STEP5;
 		  end
 		  
 		  STEP5: begin
+		      $display("***In STEP5***");
 				if(j < 64) begin
 					{a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[t], t);
 				end else begin
@@ -202,6 +208,7 @@ endfunction
 		  end
 		  
 		  STEP6: begin
+		      $display("***In STEP6***");
 				if(m != total_length / 512) begin
 					h0 <= h0 + a;
 					h1 <= h1 + b;
@@ -213,8 +220,11 @@ endfunction
 					h7 <= h7 + h;
 					
 					//Increment m since at this portion we know we have finished processing a block
-					m <= m + 1;
-					state <= STEP1;
+					//m <= m + 1;
+					//state <= STEP1;
+					
+					sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
+					state <= DONE;
 				end else begin
 					sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
 					state <= DONE;
@@ -223,7 +233,7 @@ endfunction
 		  
       DONE: begin
 		    $display("Printing sha256_digest here");
-			 $display("%p", w);
+			 $display("%p", sha256_digest);
           done <= 1;
           state <= IDLE;
         end
