@@ -16,10 +16,9 @@ enum logic [2:0] {IDLE=3'b000, STEP1=3'b001, STEP2=3'b010, STEP3=3'b011, STEP4=3
 logic   [255:0] sha256_hash; // results here
 
 
-int             message_size = 120; // in bytes // change this number to test your design
 int             pad_length;
 
-int             t, m, i, j;
+int             t, m, i, j, p;
 int             outloop;
 int             cycles;
 
@@ -45,6 +44,7 @@ logic [31:0] current_block[15:0]; //
 logic [31:0] temp_block[15:0];
 logic [31:0] last_block[15:0];
 
+logic [63:0] padded_size;
 
 parameter int sha256_k[0:63] = '{
    32'h428a2f98, 32'h71374491, 32'hb5c0fbcf, 32'he9b5dba5, 32'h3956c25b, 32'h59f111f1, 32'h923f82a4, 32'hab1c5ed5,
@@ -94,6 +94,8 @@ endfunction
   assign pad_length = 512 - (((size * 8) + 65) % 512); // # of zeroes required for padding to fit into 512 block
   logic [31:0] total_length;
   //assign total_length = (size * 8) + 65 + pad_length; // the total length of the message with delimiter and padded zeroes and size. NOTE: should always be a multiple of 512
+  logic [8:0] lastbit_loc;
+  logic [31:0] delimiter_loc;
 
   always_ff @(posedge clk, negedge reset_n)
   begin
@@ -104,6 +106,8 @@ endfunction
       IDLE: // start
           if (start) begin 
 			   total_length <= (size * 8) + 65 + pad_length;
+				padded_size[31:0] <= size;
+				padded_size[63:32] <= 32'b0;
 				
 				h0 <= 32'h6a09e667;
 				h1 <= 32'hbb67ae85;
@@ -126,10 +130,14 @@ endfunction
         end
       STEP2: begin // READ 1
 		    $display("total length %d", total_length);
+			$display("pad length %d", pad_length);
+			$display("size: %d", size);
+			 $display("last bit loc %b %d", lastbit_loc, lastbit_loc);
 			 $display("PROCESSING BLOCK %d", m);
           mem_we <= 0;
           //mem_addr <= message_addr + rc;
           rc <= rc + 1;
+          lastbit_loc <= (size*8)-(512*m);
           state <= STEP3;
         end
       
@@ -150,12 +158,17 @@ endfunction
 			 
 			 //Check for last word. 
 			 if(rc == num_words)begin
-				case(message_size % 4)
+				case(size % 4)
 				0: current_block[i] <= 32'h80000000;
 				1: current_block[i] <= mem_read_data & 32'hFF000000 | 32'h00800000;
 				2: current_block[i] <= mem_read_data & 32'hFFFF0000 | 32'h00008000;
 				3: current_block[i] <= mem_read_data & 32'hFFFFFF00 | 32'h00000080;
 				endcase
+				
+				current_block[lastbit_loc+1][i] <= 1'b1;
+				//current_block[lastbit_loc+2 +: pad_length][i] <= 0;
+				//current_block[511:446][i] <= padded_size;
+				
 			 end
 			
 			//If current block is not full of 16 words, go back to STEP1 to get mem_addr of next word
@@ -354,4 +367,4 @@ endfunction
 
 
 
-endmodule 
+endmodule
