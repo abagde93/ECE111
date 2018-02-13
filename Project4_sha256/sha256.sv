@@ -125,7 +125,9 @@ endfunction
       STEP1: begin // READ 0
 		    
           mem_we <= 0;
-          mem_addr <= message_addr[15:0] + rc;
+          //mem_addr <= message_addr[15:0] + rc;
+		  //rc <= rc + 16'b1;
+		  lastbit_loc <= (size*8)-(512*(m-1));
           state <= STEP2;
         end
       STEP2: begin // READ 1
@@ -135,9 +137,9 @@ endfunction
 			//$display("last bit loc %b %d", lastbit_loc, lastbit_loc);
 			//$display("PROCESSING BLOCK %d", m);
           mem_we <= 0;
-          //mem_addr <= message_addr + rc;
+          mem_addr <= message_addr[15:0] + rc;
           rc <= rc + 16'b1;
-          lastbit_loc <= (size*8)-(512*m);
+          lastbit_loc <= (size*8)-(512*(m-1));
           state <= STEP3;
         end
       
@@ -171,26 +173,18 @@ endfunction
 				state <= STEP4;
 				//$display("testing break\n");
 				//continue;
-//				
-//			//Now it's time to pad zeros
-//				current_block[lastbit_loc+1][i] <= 1'b1;
-//				if(i < lastbit_loc + pad_length) begin
-//				   $display("YESYESYESYES");
-//				end
-//				//current_block[lastbit_loc+2 +: pad_length][i] <= 0;
-//				//current_block[511:446][i] <= padded_size;
-				
+
 			end
 			
 			//If current block is not full of 16 words, go back to STEP1 to get mem_addr of next word
 			else if (i < 16) begin
 				current_block[i] <= mem_read_data;
-				//$display("curr block %h", current_block[i]);
+				$display("curr block %h", current_block[i]);
 				i <= i + 1;
 				state <= STEP1;
-				//$display("%h\n", mem_read_data);
+				$display("%h\n", mem_read_data);
 			end else begin
-				i = 0; //reset word count counter
+				i <= 0; //reset word count counter
 				temp_block[15:0] <= current_block[15:0]; //move fully completed block of ONLY words into a temporary variable
 				skip_padding <= 1;
 				state <= STEP4;
@@ -275,11 +269,11 @@ endfunction
 				if(j < 64) begin
 					//$display("here is w[t] %h", w[j]);
 					{a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[j], j);
+					j <= j + 1;
 					state <= STEP7;
 				end else begin
 					state <= STEP8;
 				end
-				j <= j + 1;
 		  end
 		  
 		  STEP8: begin
