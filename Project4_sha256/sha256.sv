@@ -169,7 +169,7 @@ endfunction
 				skip_padding <= 0;
 				state <= STEP4;
 				$display("testing break\n");
-				continue;
+				//continue;
 //				
 //			//Now it's time to pad zeros
 //				current_block[lastbit_loc+1][i] <= 1'b1;
@@ -182,7 +182,7 @@ endfunction
 			end
 			
 			//If current block is not full of 16 words, go back to STEP1 to get mem_addr of next word
-			if (i < 16) begin
+			else if (i < 16) begin
 				current_block[i] <= mem_read_data;
 				$display("curr block %h", current_block[i]);
 				i <= i + 1;
@@ -202,10 +202,11 @@ endfunction
 				//Pretty much bypass STEP4 is we are not dealing with the last/padded block
 		  
 		      if (skip_padding == 1) begin
-					state <= STEP5;
+					state <= STEP6;
+					//continue;
 			  end
 			  else begin
-					state <= STEP6;
+					state <= STEP5;
 			  end
 		end
 		
@@ -217,33 +218,22 @@ endfunction
 				if(pad_var < (pad_length - (lastbit_loc+1))) begin		//This adds 0's until the last 64 bits of the block
 					//current_block[lastbit_loc+2 + pad_var][i] <= 0;
 					pad_var <= pad_var + 1;
-					state <= STEP4;
-					continue:
+					state <= STEP5;
+					//continue:
 			   end
 				
 				//current_block[14] <= size;										//This adds the padded_size(32 bits representing size, 32 filler 0 bits)
 				//current_block[15] <= 32'b0;
-				
-				temp_block[15:0] <= current_block[15:0]; 					//move fully completed block of ONLY words into a temporary variable
-				state <= STEP6;
+				else begin
+					temp_block[15:0] <= current_block[15:0]; 					//move fully completed block of ONLY words into a temporary variable
+					state <= STEP6;
+			   end
 		end
 		  
 		  
 		  STEP6: begin
 		      //$display("***In STEP5***");
 				//$display("Temp block is: %p", temp_block);
-				
-				if (t < 16) begin
-					w[t] <= temp_block[t];
-					state <= STEP6;
-					continue;
-				end else begin
-					w[t] <= wtnew;
-					state <= STEP6;
-					continue;
-				end
-				t <= t + 1;
-				
 				
 				//$display("t is %d", t);
 				if(t == 63) begin
@@ -260,8 +250,20 @@ endfunction
 					//Reset t to 0 in preperation for the next block
 					t <= 0;
 					state <= STEP7;
-					
 				end
+				
+				else if (t < 16) begin
+					w[t] <= temp_block[t];
+					state <= STEP6;
+					//continue;
+				end else begin
+					w[t] <= wtnew;
+					state <= STEP6;
+					//continue;
+				end
+				t <= t + 1;
+				
+				
 		  end
 		  
 		  STEP7: begin
