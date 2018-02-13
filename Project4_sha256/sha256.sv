@@ -158,6 +158,7 @@ endfunction
 			 
 			//Check for last word. 
 			if(rc == num_words)begin
+			   $display("Found last word");
 				case(size % 4)
 				0: current_block[i] <= 32'h80000000;
 				1: current_block[i] <= mem_read_data & 32'hFF000000 | 32'h00800000;
@@ -168,7 +169,7 @@ endfunction
 				pad_var <= 0;
 				skip_padding <= 0;
 				state <= STEP4;
-				$display("testing break\n");
+				//$display("testing break\n");
 				//continue;
 //				
 //			//Now it's time to pad zeros
@@ -184,10 +185,10 @@ endfunction
 			//If current block is not full of 16 words, go back to STEP1 to get mem_addr of next word
 			else if (i < 16) begin
 				current_block[i] <= mem_read_data;
-				$display("curr block %h", current_block[i]);
+				//$display("curr block %h", current_block[i]);
 				i <= i + 1;
 				state <= STEP1;
-				$display("%h\n", mem_read_data);
+				//$display("%h\n", mem_read_data);
 			end else begin
 				i = 0; //reset word count counter
 				temp_block[15:0] <= current_block[15:0]; //move fully completed block of ONLY words into a temporary variable
@@ -198,7 +199,7 @@ endfunction
         end
 		  
 		STEP4: begin
-				$display("Testing break2\n");
+				//$display("Testing break2\n");
 				//Pretty much bypass STEP4 is we are not dealing with the last/padded block
 		  
 		      if (skip_padding == 1) begin
@@ -211,6 +212,7 @@ endfunction
 		end
 		
 		STEP5: begin
+		      //$display("In STEP5");
 				//Now its time to do the padding
 				
 				//current_block[lastbit_loc+1][i] <= 1'b1;					//This is the delimiter
@@ -232,10 +234,10 @@ endfunction
 		  
 		  
 		  STEP6: begin
-		      //$display("***In STEP5***");
+		      //$display("***In STEP6***");
 				//$display("Temp block is: %p", temp_block);
 				
-				//$display("t is %d", t);
+				$display("t is %d", t);
 				if(t == 63) begin
 					a <= h0;
 					b <= h1;
@@ -254,22 +256,24 @@ endfunction
 				
 				else if (t < 16) begin
 					w[t] <= temp_block[t];
+					t <= t + 1;
 					state <= STEP6;
 					//continue;
 				end else begin
 					w[t] <= wtnew;
+					t <= t + 1;
 					state <= STEP6;
 					//continue;
 				end
-				t <= t + 1;
+				
 				
 				
 		  end
 		  
 		  STEP7: begin
-		      $display("***In STEP7***");
+		      //$display("***In STEP7***");
 				if(j < 64) begin
-					$display("here is w[t] %h", w[j]);
+					//$display("here is w[t] %h", w[j]);
 					{a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[j], j);
 					state <= STEP7;
 				end else begin
