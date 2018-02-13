@@ -125,9 +125,9 @@ endfunction
       STEP1: begin // READ 0
 		    
           mem_we <= 0;
-          //mem_addr <= message_addr[15:0] + rc;
+          mem_addr <= message_addr[15:0] + rc;
 		  //rc <= rc + 16'b1;
-		  lastbit_loc <= (size*8)-(512*(m-1));
+		  lastbit_loc <= (size*8)-(512*m);
           state <= STEP2;
         end
       STEP2: begin // READ 1
@@ -137,9 +137,9 @@ endfunction
 			//$display("last bit loc %b %d", lastbit_loc, lastbit_loc);
 			//$display("PROCESSING BLOCK %d", m);
           mem_we <= 0;
-          mem_addr <= message_addr[15:0] + rc;
+          //mem_addr <= message_addr[15:0] + rc;
           rc <= rc + 16'b1;
-          lastbit_loc <= (size*8)-(512*(m-1));
+          lastbit_loc <= (size*8)-(512*m);
           state <= STEP3;
         end
       
@@ -160,7 +160,7 @@ endfunction
 			 
 			//Check for last word. 
 			if(rc == num_words)begin
-			   $display("Found last word");
+			   //$display("Found last word");
 				case(size % 4)
 				0: current_block[i] <= 32'h80000000;
 				1: current_block[i] <= mem_read_data & 32'hFF000000 | 32'h00800000;
@@ -179,10 +179,10 @@ endfunction
 			//If current block is not full of 16 words, go back to STEP1 to get mem_addr of next word
 			else if (i < 16) begin
 				current_block[i] <= mem_read_data;
-				$display("curr block %h", current_block[i]);
+				//$display("curr block %h", current_block[i]);
 				i <= i + 1;
 				state <= STEP1;
-				$display("%h\n", mem_read_data);
+				//$display("%h\n", mem_read_data);
 			end else begin
 				i <= 0; //reset word count counter
 				temp_block[15:0] <= current_block[15:0]; //move fully completed block of ONLY words into a temporary variable
@@ -197,10 +197,12 @@ endfunction
 				//Pretty much bypass STEP4 is we are not dealing with the last/padded block
 		  
 		      if (skip_padding == 1) begin
+				   $display("Not last block, not doing padding");
 					state <= STEP6;
 					//continue;
 			  end
 			  else begin
+			      $display("Last block, doing padding");
 					state <= STEP5;
 			  end
 		end
@@ -208,19 +210,26 @@ endfunction
 		STEP5: begin
 		      //$display("In STEP5");
 				//Now its time to do the padding
+				//$display(lastbit_loc);
+				current_block[(lastbit_loc/16)+1][lastbit_loc%16] <= 1'b1;					//This is the delimiter
 				
-				//current_block[lastbit_loc+1][i] <= 1'b1;					//This is the delimiter
-				
-				if(pad_var < (pad_length - (lastbit_loc+1))) begin		//This adds 0's until the last 64 bits of the block
-					//current_block[lastbit_loc+2 + pad_var][i] <= 0;
+				if(pad_var < (pad_length - (lastbit_loc+1))) begin		   //This adds 0's until the last 64 bits of the block
+					//$display("padded current block");
+					//$display(current_block);
+					current_block[(lastbit_loc/16)+2][lastbit_loc%16] <= 0;
 					pad_var <= pad_var + 1;
+					
+					current_block[14] <= size << 3;										//This adds the padded_size(32 bits representing size, 32 filler 0 bits)
+				   current_block[15] <= 32'b0 << 3;
+					
 					state <= STEP5;
 					//continue:
 			   end
 				
-				//current_block[14] <= size;										//This adds the padded_size(32 bits representing size, 32 filler 0 bits)
-				//current_block[15] <= 32'b0;
+				
 				else begin
+				
+				
 					temp_block[15:0] <= current_block[15:0]; 					//move fully completed block of ONLY words into a temporary variable
 					state <= STEP6;
 			   end
@@ -231,7 +240,7 @@ endfunction
 		      //$display("***In STEP6***");
 				//$display("Temp block is: %p", temp_block);
 				
-				$display("t is %d", t);
+				//$display("t is %d", t);
 				if(t == 63) begin
 					a <= h0;
 					b <= h1;
