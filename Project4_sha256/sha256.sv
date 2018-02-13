@@ -11,14 +11,14 @@ assign num_words = size/4;
 
 logic [3:0] counter;
 logic [31:0] read_data;
-enum logic [2:0] {IDLE=3'b000, STEP1=3'b001, STEP2=3'b010, STEP3=3'b011, STEP4=3'b100, STEP5=3'b101, STEP6=3'b110, DONE=3'b111} state;
+enum logic [3:0] {IDLE=4'b0000, STEP1=4'b0001, STEP2=4'b0010, STEP3=4'b0011, STEP4=4'b0100, STEP5=4'b0101, STEP6=4'b0110, STEP7=4'b0111, DONE=4'b1000} state;
 
 logic   [255:0] sha256_hash; // results here
 
 
 int             pad_length;
 
-int             t, m, i, j, p;
+int             t, m, i, j, p, pad_var, skip_padding;
 int             outloop;
 int             cycles;
 
@@ -165,9 +165,17 @@ endfunction
 				3: current_block[i] <= mem_read_data & 32'hFFFFFF00 | 32'h00000080;
 				endcase
 				
-				current_block[lastbit_loc+1][i] <= 1'b1;
-				//current_block[lastbit_loc+2 +: pad_length][i] <= 0;
-				//current_block[511:446][i] <= padded_size;
+				pad_var <= 0;
+				skip_padding <= 0;
+				state <= STEP4;
+//				
+//			//Now it's time to pad zeros
+//				current_block[lastbit_loc+1][i] <= 1'b1;
+//				if(i < lastbit_loc + pad_length) begin
+//				   $display("YESYESYESYES");
+//				end
+//				//current_block[lastbit_loc+2 +: pad_length][i] <= 0;
+//				//current_block[511:446][i] <= padded_size;
 				
 			 end
 			
@@ -179,26 +187,48 @@ endfunction
 			 end else begin
 				i = 0; //reset word count counter
 				temp_block[15:0] <= current_block[15:0]; //move fully completed block of ONLY words into a temporary variable
+				skip_padding <= 1;
 				state <= STEP4;
 			 end
 					
-					
-
-          //if(processing completed) begin
-				//state <= DONE;
-			 //end
         end
 		  
 		  STEP4: begin
-		      $display("***In STEP4***");
+		  
+				//Pretty much bypass STEP4 is we are not dealing wiht the last/padded block
+		  
+		      if (skip_padding == 1) begin
+				   state <= STEP5;
+			   end
+		  
+				//Now its time to do the padding
+				
+				current_block[lastbit_loc+1][i] <= 1'b1;					//This is the delimiter
+				
+				if(pad_var < (pad_length - (lastbit_loc+1))) begin		//This adds 0's until the last 64 bits of the block
+					current_block[lastbit_loc+2 + pad_var][i] <= 0;
+					pad_var <= pad_var + 1;
+					state <= STEP4;
+			   end
+				
+				current_block[15] <= size;										//This adds the padded_size(32 bits representing size, 32 filler 0 bits)
+				current_block[16] <= 32'b0;
+				
+				temp_block[15:0] <= current_block[15:0]; 					//move fully completed block of ONLY words into a temporary variable
+				state <= STEP5;
+		  
+		  end
+		  
+		  STEP5: begin
+		      $display("***In STEP5***");
 				$display("Temp block is: %p", temp_block);
 				
 				if (t < 16) begin
 					w[t] <= temp_block[t];
-					state <= STEP4;
+					state <= STEP5;
 				end else begin
 					w[t] <= wtnew;
-					state <= STEP4;
+					state <= STEP5;
 				end
 				t <= t + 1;
 				
@@ -216,24 +246,24 @@ endfunction
 					
 					//Reset t to 0 in preperation for the next block
 					t <= 0;
-					state <= STEP5;
+					state <= STEP6;
 					
 				end
 		  end
 		  
-		  STEP5: begin
-		      $display("***In STEP5***");
+		  STEP6: begin
+		      $display("***In STEP6***");
 				if(j < 64) begin
 					{a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[t], t);
-					state <= STEP5;
-				end else begin
 					state <= STEP6;
+				end else begin
+					state <= STEP7;
 				end
 				j <= j + 1;
 		  end
 		  
-		  STEP6: begin
-		      $display("***In STEP6***");
+		  STEP7: begin
+		      $display("***In STEP7***");
 				if(m != (total_length / 512) -1) begin		//The "-1" is because m starts at block 0
 					h0 <= h0 + a;
 					h1 <= h1 + b;
@@ -246,6 +276,9 @@ endfunction
 					
 					//Increment m since at this portion we know we have finished processing a block
 					m <= m + 1;
+					
+					
+					
 					state <= STEP1;
 					
 					//sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
