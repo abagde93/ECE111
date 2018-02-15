@@ -1,30 +1,12 @@
-//SHA Encryption
+ //SHA Encryption
 module sha256(input logic clk, reset_n, start, 
-					input logic [31:0] message_addr, size, output_addr,
-					output logic done, mem_clk, mem_we, 
-					output logic [15:0] mem_addr, 
-					output logic [31:0] mem_write_data,
-					input logic [31:0] mem_read_data);
-
-logic [31:0] num_words;
-assign num_words = size/4;
-
-logic [31:0] num_blocks;
-
-logic [3:0] counter;
-logic [31:0] read_data;
-enum logic [3:0] {IDLE=4'b0000, STEP1=4'b0001, STEP2=4'b0010, STEP3=4'b0011, STEP4=4'b0100, STEP5=4'b0101, STEP6=4'b0110, STEP7=4'b0111, STEP8=4'b1000, DONE=4'b1001} state;
-
-logic   [255:0] sha256_hash; // results here
-
-
-int             pad_length;
-
-int             t, m, i, j, p, pad_var, skip_padding;
-int             outloop;
-int             cycles;
-
-logic   [255:0] sha256_digest;
+                    input logic [31:0] message_addr, size, output_addr,
+                    output logic done, mem_clk, mem_we, 
+                    output logic [15:0] mem_addr, 
+                    output logic [31:0] mem_write_data,
+                    input logic [31:0] mem_read_data);
+//begin variables
+enum logic [2:0] {IDLE=3'b000, STEP1=3'b001, STEP2=3'b010, STEP3=3'b011, STEP4=3'b100, STEP5=3'b101, STEP6=3'b110, DONE=3'b111} state;
 
 logic   [31:0] h0;
 logic   [31:0] h1;
@@ -36,18 +18,30 @@ logic   [31:0] h6;
 logic   [31:0] h7;
 
 logic   [31:0] a, b, c, d, e, f, g, h;
-logic   [31:0] s1, s0;
 
-logic   [31:0] w[0:63];
+logic [255:0] sha256_digest;
 
-logic [15:0] rc, wc; // read and write counters
+logic    [31:0] w[64];
+logic    [31:0] num_blocks;
+logic    [31:0] total_length;
+logic    [31:0] current_block;
+logic    [31:0] last;
 
-logic [31:0] current_block[15:0]; //
-logic [31:0] temp_block[15:0];
-logic [31:0] last_block[15:0];
 
-//logic [31:0] w_in;
+logic    [7:0] t;
+logic    [31:0] temp[64];
+logic    [15:0] rc, wc; // read and write counters
 
+int pad_length;
+int curr,j, v;
+int num_words;
+
+assign pad_length = 512 - (((size << 3) + 65) % 512); //size of a block - ((size * 8) +65) % 512
+assign num_words = size / 4;
+logic    [5000:0] total;
+//logic    [5000:0] full_message;
+assign mem_clk = clk;
+            
 parameter int sha256_k[0:63] = '{
    32'h428a2f98, 32'h71374491, 32'hb5c0fbcf, 32'he9b5dba5, 32'h3956c25b, 32'h59f111f1, 32'h923f82a4, 32'hab1c5ed5,
    32'hd807aa98, 32'h12835b01, 32'h243185be, 32'h550c7dc3, 32'h72be5d74, 32'h80deb1fe, 32'h9bdc06a7, 32'hc19bf174,
@@ -59,7 +53,6 @@ parameter int sha256_k[0:63] = '{
    32'h748f82ee, 32'h78a5636f, 32'h84c87814, 32'h8cc70208, 32'h90befffa, 32'ha4506ceb, 32'hbef9a3f7, 32'hc67178f2
 };
 
-// right rotation
 function logic [31:0] rightrotate(input logic [31:0] x,
                                   input logic [7:0] r);
 begin
@@ -67,7 +60,6 @@ begin
 end
 endfunction
 
-//wtnew function
 function logic [31:0] wtnew; // function with no inputs
  logic [31:0] s0, s1;
  s0 = rightrotate(w[t-15],7)^rightrotate(w[t-15],18)^(w[t-15]>>3);
@@ -91,258 +83,273 @@ begin
 end
 endfunction
 
+initial begin
+    total_length = (size << 3) + 65 + pad_length;
+    num_blocks = total_length / 512;
+end
 
-  assign mem_clk = clk;
-  assign pad_length = 512 - (((size * 8) + 65) % 512); // # of zeroes required for padding to fit into 512 block
-  logic [31:0] total_length;
-  //assign total_length = (size * 8) + 65 + pad_length; // the total length of the message with delimiter and padded zeroes and size. NOTE: should always be a multiple of 512
-  logic [31:0] lastbit_loc;
-  logic [31:0] delimiter_loc;
-
-  always_ff @(posedge clk, negedge reset_n)
-  begin
+always_ff @(posedge clk, negedge reset_n)
+begin
     if (!reset_n) begin
-      state <= IDLE;
-    end else
-      case (state)
-      IDLE: // start
-          if (start) begin 
-			   total_length <= (size * 8) + 65 + pad_length;
-			
-				h0 <= 32'h6a09e667;
-				h1 <= 32'hbb67ae85;
-				h2 <= 32'h3c6ef372;
-				h3 <= 32'ha54ff53a;
-				h4 <= 32'h510e527f;
-				h5 <= 32'h9b05688c;
-				h6 <= 32'h1f83d9ab;
-				h7 <= 32'h5be0cd19;
-            mem_we <= 0;
-            mem_addr <= message_addr;
-            rc <= 1;
-            state <= STEP2;
-          end
-      STEP1: begin // READ 0
-		    
-          mem_we <= 0;
-          //mem_addr <= message_addr + rc;
-			 //rc <= rc + 1;
-		  
+        state <= IDLE;
+    end else begin
+        case (state)
+            IDLE:
+                if (start) begin 
+                    h0 <= 32'h6a09e667;
+                    h1 <= 32'hbb67ae85;
+                    h2 <= 32'h3c6ef372;
+                    h3 <= 32'ha54ff53a;
+                    h4 <= 32'h510e527f;
+                    h5 <= 32'h9b05688c;
+                    h6 <= 32'h1f83d9ab;
+                    h7 <= 32'h5be0cd19;
+						  
+						  //*****TESTING RESULTS: IF YOU COMMENT a-h BELOW OUT, NO OUTPUT, WEIRD...***** Its like a-h never get initially set otherwise even though they should
+                    a <= 32'h6a09e667;
+                    b <= 32'hbb67ae85;
+                    c <= 32'h3c6ef372;
+                    d <= 32'ha54ff53a;
+                    e <= 32'h510e527f;
+                    f <= 32'h9b05688c;
+                    g <= 32'h1f83d9ab;
+                    h <= 32'h5be0cd19;
+						  
+						  
+                    t <= 0;
+                    curr <= 0;
+                    mem_we <= 0;
+                    mem_addr <= message_addr;
+                    rc <= 1;
+                    state <= STEP1;
+                end
+            //if not start STATE stays IDLE
+            STEP1: begin
+                mem_addr <= message_addr + rc;
+                rc <= rc + 1;
+                state <= STEP2;
+            end
+            STEP2: begin //reader
 
-          state <= STEP2;
-        end
-      STEP2: begin // READ 1
-		   $display("SIZE SHIFTED is %b", (size >> 2)+1);
-		   num_blocks <= total_length/512;
-		   //$display("NUMBER OF BLOCKS IS %d", num_blocks);
-		    
-          //mem_we <= 0;
-          //mem_addr <= message_addr[15:0] + rc;
-          //rc <= rc + 16'b1;
-          //lastbit_loc <= (size*8)-(512*m);
-          state <= STEP3;
-        end
-      
-		// READ 3, data on mem_read_data is available to use
-		//mem_read_data just contains a 32 bit message
-		STEP3: begin 
-		   
-		if (t <= 15) begin
-			 
-			 
-			 if (rc <= num_words) begin
-			   mem_addr <= message_addr + rc;
-			   rc <= rc + 1;
-				w[t] <= mem_read_data;
+                //$display(mem_read_data);
+                //$display(rc);
+                 if (t < 64) begin
+                    if(t < 16 && rc < num_words) begin		//we only want to read words we are given, no more make sense?
+                        w[t] <= mem_read_data;
+                        state <= STEP1;
+                    end
+						  
+						  
+						  else if (rc == num_words) begin
+								case (size % 4)
+								  0: w[t] <= 32'h80000000;
+								  1: w[t] <= (mem_read_data & 32'hff000000) | 32'h00800000;
+								  2: w[t] <= (mem_read_data & 32'hffff0000) | 32'h00008000;
+								  3: w[t] <= (mem_read_data & 32'hffffff00) | 32'h00000080;
+								endcase
+								
+								if (t == 14 && rc == num_words) begin
+								 w[t] <= {29'd0, size[31:29]};
+							   end
+							   else if (t == 15 && rc == num_words) begin
+								 w[t] <= {size[28:0], 3'd0};
+							   end
+							   else begin
+								 w[t] <= 32'd0;   //pad with zeros
+							   end
+								
+								
+						  end
+							
+						  
+                    if(t > 15) begin
+                        if(t == 16) begin
+                            last <= mem_read_data;
+                        end
+                        w[t] <= wtnew;
+                        state <= STEP2;
+                    end
+                    t <= t + 1;
+                    
+                end 
+                else begin
+					     
+						 $display("t is %d", t);
+				       if(t == 63) begin  //*****TESTING RESULTS: CHANGING THIS "t" DOES NOT CHANGE FINAL RESULT, WEIRD...*****
+						   a <= h0;
+					      b <= h1;
+					      c <= h2;
+					      d <= h3;
+					      e <= h4;
+					      f <= h5;
+					      g <= h6;
+					      h <= h7;
+						 end
+					     
+                    t <= 0;
+                    curr <= curr + 1;
+						  $display("PROCESSING BLOCK %d", curr);
+                    state <= STEP3;
+                end 
+
+            end
+            
 				
-			 end
-			 else if (rc == num_words) begin
-				case (size % 4)
-				  0: w[t] <= 32'h80000000;
-				  1: w[t] <= (mem_read_data & 32'hff000000) | 32'h00800000;
-				  2: w[t] <= (mem_read_data & 32'hffff0000) | 32'h00008000;
-				  3: w[t] <= (mem_read_data & 32'hffffff00) | 32'h00000080;
-				endcase
+				STEP3: begin
+				    
+					 //Just testing w display for each block
+				    for(int i = 0; i < 64; i++) begin
+                    $display("w[t]: %h", w[i]); 
+                end
+                
+					 //Setting 64 computed w's to temp. Use "temp" for sha256_op fucntion 
+//                for(int i = 0; i < 64; i++) begin
+//                    temp[i] <= w[i];
+//                    w[i] <= 0;
+//                end
+					 
+					 //NOT SURE IF ABOVE FOR LOOP WORKS HERE, SO DID STATE CALLBACK INSTEAD. GET RID OF IF NOT NEEDED. I think they do the same thing but double check
+					 if (v < 64) begin
+					     temp[v] <= w[v];
+						  w[v] <= 0;
+						  v <= v+1;
+						  state <= STEP3;
+					 end
+					 
+					 else begin
+					    v <= 0;
+					    state <= STEP4;
+					 end
+			   end
+				
+				STEP4: begin
+				    $display("IN STEP 4");
+					 $display("DISPLAYING TEMP BLOCK");
+					 for(int i = 0; i < 64; i++) begin
+                    $display("temp[j]: %h", temp[i]); 
+                end
+				    if(j < 64) begin       //*****TESTING REULTS: Changing J from <64 to <60 changes the final hash, so sha256_op is computing something...*****
+							{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, temp[j], j);
+							j <= j + 1;
+							state <= STEP4;
+					 end else begin
+					      j <= 0;
+							state <= STEP5;
+					 end
+			   end
+				
+				STEP5: begin
+					 
+                if(curr != 3) begin
+                    $display(last);
+                    w[0] <= last;
+						  
+						  h0 <= h0 + a;
+						  h1 <= h1 + b;
+					     h2 <= h2 + c;
+					     h3 <= h3 + d;
+					     h4 <= h4 + e;
+					     h5 <= h5 + f;
+					     h6 <= h6 + g;
+					     h7 <= h7 + h;
+
+
+                    state <= STEP1;
+                    
+                    
+						  
+                end else begin
+					 
+					     
+                    sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
+						  
+						  //Need to set write count here for testbench dpsram
+						  wc <= 0;	
+						  mem_we <= 1;
+						  state <= STEP6;
+						  
+                    //state <= DONE;
+                end
+            end
+				
+				STEP6: begin
+				  $display("***IN STEP 6***");
+				  $display("Data is %x", mem_write_data);
+				  
+				  if (wc == 0) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h0;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else if (wc == 1) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h1;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else if (wc == 2) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h2;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else if (wc == 3) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h3;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else if (wc == 4) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h4;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else if (wc == 5) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h5;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else if (wc == 6) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h6;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else if (wc == 7) begin
+						mem_addr <= output_addr + wc;
+						mem_write_data <= h7;
+						wc <= wc +1;
+						state <= STEP6;
+				  end
+				  
+				  else begin
+						mem_we <= 0;
+						state <= DONE;
+				  end
+				
+				end
 				
 				
-			 end
-			 
-			 if (t == 14 && rc == num_words) begin
-				 w[t] <= {29'd0, size[31:29]};
-			 end
-			 else if (t == 15 && rc == num_words) begin
-				 w[t] <= {size[28:0], 3'd0};
-			 end
-			 else begin
-				 w[t] <= 32'd0;   //pad with zeros
-			 end
-			 
-		  end
-		  else begin //generate new values of w using previous values
-			 w[t] <= wtnew;
-		  end
-		  
-		  if(t == 64) begin
-			   $display("w is %p", w);
-			   t <= 0;
-				state <= STEP4;
-				continue;
-		   end
-		  
-		  t <= t + 1;
-		  $display("read counter is %d", rc);
-		  $display("w[t] is %p", w[t]);
-		  //$display("memread data is %d", mem_read_data);
-		  state <= STEP1;
-					
-     end
-	  
-	  
-	  STEP4: begin
-	     $display("IN STEP4");
-		  $display("m is %d", m);
-	     m <= m + 1;
-		  if (m == 2) begin
-		     state <= DONE;
-			  continue;
-		  end
-		  
-		  state <= STEP1;
-	  
-	  end
-		  
-//		STEP4: begin
-//				//$display("Testing break2\n");
-//				//Pretty much bypass STEP4 is we are not dealing with the last/padded block
-//		  
-//		      if (skip_padding == 1) begin
-//				   $display("Not last block, not doing padding");
-//					state <= STEP6;
-//					//continue;
-//			  end
-//			  else begin
-//			      $display("Last block, doing padding");
-//					state <= STEP5;
-//			  end
-//		end
-//		
-//		STEP5: begin
-//		      //$display("In STEP5");
-//				//Now its time to do the padding
-//				//$display(lastbit_loc);
-//				current_block[(lastbit_loc/32)+1][lastbit_loc%16] <= 1'b1;					//This is the delimiter
-//				
-//				if(pad_var < (pad_length - (lastbit_loc+1))) begin		   //This adds 0's until the last 64 bits of the block
-//					$display("pad_var is ");
-//					$display(pad_var);
-//					current_block[(lastbit_loc/32)+2][lastbit_loc%16] <= 0;
-//					pad_var <= pad_var + 1;
-//					
-//					current_block[14] <= size << 3;										//This adds the padded_size(32 bits representing size, 32 filler 0 bits)
-//				   current_block[15] <= 32'b0;
-//					
-//					state <= STEP5;
-//					//continue:
-//			   end
-//				
-//				
-//				else begin
-//				
-//				
-//					temp_block[15:0] <= current_block[15:0]; 					//move fully completed block of ONLY words into a temporary variable
-//					state <= STEP6;
-//			   end
-//		end
-//		  
-//		  
-//		  STEP6: begin
-//		      //$display("***In STEP6***");
-//				//$display("Temp block is: %p", temp_block);
-//				
-//				//$display("t is %d", t);
-//				if(t == 63) begin
-//					a <= h0;
-//					b <= h1;
-//					c <= h2;
-//					d <= h3;
-//					e <= h4;
-//					f <= h5;
-//					g <= h6;
-//					h <= h7;
-//					$display("Temp block is: %p", temp_block);
-//					
-//					//Reset t to 0 in preperation for the next block
-//					t <= 0;
-//					state <= STEP7;
-//				end
-//				
-//				else if (t < 16) begin
-//					w[t] <= temp_block[t];
-//					t <= t + 1;
-//					state <= STEP6;
-//					//continue;
-//				end else begin
-//					w[t] <= wtnew;
-//					t <= t + 1;
-//					state <= STEP6;
-//					//continue;
-//				end
-//				
-//				
-//				
-//		  end
-//		  
-//		  STEP7: begin
-//		      //$display("***In STEP7***");
-//				if(j < 64) begin
-//					//$display("here is w[t] %h", w[j]);
-//					{a, b, c, d, e, f, g, h} = sha256_op(a, b, c, d, e, f, g, h, w[j], j);
-//					j <= j + 1;
-//					state <= STEP7;
-//				end else begin
-//					state <= STEP8;
-//				end
-//		  end
-//		  
-//		  STEP8: begin
-//		      $display("***In STEP8***");
-//				if(m != (total_length / 512) -1) begin		//The "-1" is because m starts at block 0
-//					h0 <= h0 + a;
-//					h1 <= h1 + b;
-//					h2 <= h2 + c;
-//					h3 <= h3 + d;
-//					h4 <= h4 + e;
-//					h5 <= h5 + f;
-//					h6 <= h6 + g;
-//					h7 <= h7 + h;
-//					
-//					//Increment m since at this portion we know we have finished processing a block
-//					m <= m + 1;
-//					
-//					
-//					state <= STEP1;
-//					
-//					//sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
-//					//state <= DONE;
-//				end else begin
-//					sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
-//					state <= DONE;
-//				end
-//		  end
-//		  
-      DONE: begin
-		    $display("Printing sha256_digest here");
-			$display("%x", sha256_digest);
-			//$display("w is %p", w);
-          done <= 1;
-          state <= IDLE;
-        end
-      endcase
-  end
+            DONE: begin
+				
+				    $display("Printing sha256_digest here");
+					 $display("%x", sha256_digest);
+                
+                done <= 1;
+                state <= IDLE;
+            end    
+        endcase
+    end
+end
 
-
-		
-
-
-
-endmodule
+endmodule 
