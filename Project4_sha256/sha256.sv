@@ -105,7 +105,7 @@ begin
                     h6 <= 32'h1f83d9ab;
                     h7 <= 32'h5be0cd19;
 						  
-						  //*****TESTING RESULTS: IF YOU COMMENT a-h BELOW OUT, NO OUTPUT, WEIRD...***** Its like a-h never get initially set otherwise even though they should
+					//*****TESTING RESULTS: IF YOU COMMENT a-h BELOW OUT, NO OUTPUT, WEIRD...***** Its like a-h never get initially set otherwise even though they should
                     a <= 32'h6a09e667;
                     b <= 32'hbb67ae85;
                     c <= 32'h3c6ef372;
@@ -133,34 +133,29 @@ begin
 
                 //$display(mem_read_data);
                 //$display(rc);
-                 if (t < 64) begin
+                if (t < 64) begin
                     if(t < 16 && rc < num_words) begin		//we only want to read words we are given, no more make sense?
                         w[t] <= mem_read_data;
                         state <= STEP1;
-                    end
-						  
-						  
-						  else if (rc == num_words) begin
-								case (size % 4)
-								  0: w[t] <= 32'h80000000;
-								  1: w[t] <= (mem_read_data & 32'hff000000) | 32'h00800000;
-								  2: w[t] <= (mem_read_data & 32'hffff0000) | 32'h00008000;
-								  3: w[t] <= (mem_read_data & 32'hffffff00) | 32'h00000080;
-								endcase
+                    end	  
+					else if (rc == num_words) begin
+						case (size % 4)
+							0: w[t] <= 32'h80000000;
+							1: w[t] <= (mem_read_data & 32'hff000000) | 32'h00800000;
+							2: w[t] <= (mem_read_data & 32'hffff0000) | 32'h00008000;
+							3: w[t] <= (mem_read_data & 32'hffffff00) | 32'h00000080;
+						endcase
 								
-								if (t == 14 && rc == num_words) begin
-								 w[t] <= {29'd0, size[31:29]};
-							   end
-							   else if (t == 15 && rc == num_words) begin
-								 w[t] <= {size[28:0], 3'd0};
-							   end
-							   else begin
-								 w[t] <= 32'd0;   //pad with zeros
-							   end
-								
-								
-						  end
-							
+						if (t == 14 && rc == num_words) begin
+							w[t] <= {29'd0, size[31:29]};
+						end
+						else if (t == 15 && rc == num_words) begin
+							w[t] <= {size[28:0], 3'd0};
+						end
+						else begin
+							w[t] <= 32'd0;   //pad with zeros
+						end
+					 end
 						  
                     if(t > 15) begin
                         if(t == 16) begin
@@ -174,33 +169,33 @@ begin
                 end 
                 else begin
 					     
-						 $display("t is %d", t);
-				       if(t == 63) begin  //*****TESTING RESULTS: CHANGING THIS "t" DOES NOT CHANGE FINAL RESULT, WEIRD...*****
-						   a <= h0;
-					      b <= h1;
-					      c <= h2;
-					      d <= h3;
-					      e <= h4;
-					      f <= h5;
-					      g <= h6;
-					      h <= h7;
-						 end
+					$display("t is %d", t);
+				    if(t == 64) begin  //*****TESTING RESULTS: CHANGING THIS "t" DOES NOT CHANGE FINAL RESULT, WEIRD...*****
+						a <= h0;
+					    b <= h1;
+					    c <= h2;
+					    d <= h3;
+					    e <= h4;
+					    f <= h5;
+					    g <= h6;
+					    h <= h7;
+					end
 					     
                     t <= 0;
                     curr <= curr + 1;
-						  $display("PROCESSING BLOCK %d", curr);
+					$display("PROCESSING BLOCK %d", curr);
                     state <= STEP3;
                 end 
-
             end
             
 				
-				STEP3: begin
+			STEP3: begin
 				    
 					 //Just testing w display for each block
-				    for(int i = 0; i < 64; i++) begin
+				for(int i = 0; i < 64; i++) begin
                     $display("w[t]: %h", w[i]); 
                 end
+					$display("------------------------");
                 
 					 //Setting 64 computed w's to temp. Use "temp" for sha256_op fucntion 
 //                for(int i = 0; i < 64; i++) begin
@@ -209,142 +204,132 @@ begin
 //                end
 					 
 					 //NOT SURE IF ABOVE FOR LOOP WORKS HERE, SO DID STATE CALLBACK INSTEAD. GET RID OF IF NOT NEEDED. I think they do the same thing but double check
-					 if (v < 64) begin
-					     temp[v] <= w[v];
-						  w[v] <= 0;
-						  v <= v+1;
-						  state <= STEP3;
-					 end
+				if (v < 64) begin
+					temp[v] <= w[v];
+					w[v] <= 0;
+					v <= v+1;
+					state <= STEP3;
+				end
 					 
-					 else begin
-					    v <= 0;
-					    state <= STEP4;
-					 end
-			   end
+				else begin
+					v <= 0;
+					state <= STEP4;
+				end
+			end
 				
-				STEP4: begin
-				    $display("IN STEP 4");
-					 $display("DISPLAYING TEMP BLOCK");
-					 for(int i = 0; i < 64; i++) begin
-                    $display("temp[j]: %h", temp[i]); 
-                end
-				    if(j < 64) begin       //*****TESTING REULTS: Changing J from <64 to <60 changes the final hash, so sha256_op is computing something...*****
-							{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, temp[j], j);
-							j <= j + 1;
-							state <= STEP4;
-					 end else begin
-					      j <= 0;
-							state <= STEP5;
-					 end
-			   end
+			STEP4: begin
+			    //$display("IN STEP 4");
+				//$display("DISPLAYING TEMP BLOCK");
+				//for(int i = 0; i < 64; i++) begin
+				//	$display("temp[j]: %h", temp[i]); 
+				//end
+				if(j < 64) begin       //*****TESTING REULTS: Changing J from <64 to <60 changes the final hash, so sha256_op is computing something...*****
+					{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, temp[j], j);
+					j <= j + 1;
+					state <= STEP4;
+				end else begin
+					j <= 0;
+					state <= STEP5;
+				end
+			end
 				
-				STEP5: begin
+			STEP5: begin
 					 
                 if(curr != 3) begin
                     $display(last);
                     w[0] <= last;
 						  
-						  h0 <= h0 + a;
-						  h1 <= h1 + b;
-					     h2 <= h2 + c;
-					     h3 <= h3 + d;
-					     h4 <= h4 + e;
-					     h5 <= h5 + f;
-					     h6 <= h6 + g;
-					     h7 <= h7 + h;
-
-
-                    state <= STEP1;
-                    
-                    
-						  
+					h0 <= h0 + a;
+					h1 <= h1 + b;
+					h2 <= h2 + c;
+					h3 <= h3 + d;
+					h4 <= h4 + e;
+					h5 <= h5 + f;
+					h6 <= h6 + g;
+					h7 <= h7 + h;
+                    state <= STEP1;						  
                 end else begin
-					 
-					     
                     sha256_digest <= {h0, h1, h2, h3, h4, h5, h6, h7};
 						  
-						  //Need to set write count here for testbench dpsram
-						  wc <= 0;	
-						  mem_we <= 1;
-						  state <= STEP6;
-						  
+					//Need to set write count here for testbench dpsram
+					wc <= 0;	
+					mem_we <= 1;
+					state <= STEP6;	  
                     //state <= DONE;
                 end
             end
 				
-				STEP6: begin
-				  $display("***IN STEP 6***");
-				  $display("Data is %x", mem_write_data);
+			STEP6: begin
+				$display("***IN STEP 6***");
+				$display("Data is %x", mem_write_data);
 				  
-				  if (wc == 0) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h0;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else if (wc == 1) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h1;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else if (wc == 2) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h2;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else if (wc == 3) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h3;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else if (wc == 4) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h4;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else if (wc == 5) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h5;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else if (wc == 6) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h6;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else if (wc == 7) begin
-						mem_addr <= output_addr + wc;
-						mem_write_data <= h7;
-						wc <= wc +1;
-						state <= STEP6;
-				  end
-				  
-				  else begin
-						mem_we <= 0;
-						state <= DONE;
-				  end
-				
+				if (wc == 0) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h0;
+					wc <= wc +1;
+					state <= STEP6;
 				end
+				  
+				else if (wc == 1) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h1;
+					wc <= wc +1;
+					state <= STEP6;
+				end
+				  
+				else if (wc == 2) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h2;
+					wc <= wc +1;
+					state <= STEP6;
+				end
+				  
+				else if (wc == 3) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h3;
+					wc <= wc +1;
+					state <= STEP6;
+				end
+				  
+				else if (wc == 4) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h4;
+					wc <= wc +1;
+					state <= STEP6;
+				end
+				  
+				else if (wc == 5) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h5;
+					wc <= wc +1;
+					state <= STEP6;
+				 end
+				  
+				 else if (wc == 6) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h6;
+					wc <= wc +1;
+					state <= STEP6;
+				end
+				  
+				else if (wc == 7) begin
+					mem_addr <= output_addr + wc;
+					mem_write_data <= h7;
+					wc <= wc +1;
+					state <= STEP6;
+				end
+				  
+				else begin
+					mem_we <= 0;
+					state <= DONE;
+				end
+				
+			end
 				
 				
             DONE: begin
-				
-				    $display("Printing sha256_digest here");
-					 $display("%x", sha256_digest);
-                
+				$display("Printing sha256_digest here");
+				$display("%x", sha256_digest);
                 done <= 1;
                 state <= IDLE;
             end    
