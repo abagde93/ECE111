@@ -24,23 +24,21 @@ logic [255:0] sha256_digest;
 logic    [31:0] w[64];
 logic    [31:0] num_blocks;
 logic    [31:0] total_length;
-logic    [31:0] current_block;
 logic    [31:0] last;
 
 
-logic    [7:0] t;
+
 logic    [31:0] temp[64];
 logic    [15:0] rc, wc; // read and write counters
 
 int pad_length;
-int curr,j, v, deal_first_word;
+int curr,j, v,t, deal_first_word;
 
 int num_words;
 
 assign pad_length = 512 - (((size << 3) + 65) % 512); //size of a block - ((size * 8) +65) % 512
 assign num_words = size / 4;
-logic    [5000:0] total;
-//logic    [5000:0] full_message;
+
 assign mem_clk = clk;
             
 parameter int sha256_k[0:63] = '{
@@ -84,10 +82,10 @@ begin
 end
 endfunction
 
-initial begin
-    total_length = (size << 3) + 65 + pad_length;
-    num_blocks = total_length / 512;
-end
+
+assign total_length = (size << 3) + 65 + pad_length;
+assign num_blocks = total_length / 512;
+
 
 always_ff @(posedge clk, negedge reset_n)
 begin
@@ -105,16 +103,6 @@ begin
                     h5 <= 32'h9b05688c;
                     h6 <= 32'h1f83d9ab;
                     h7 <= 32'h5be0cd19;
-                          
-                          //*****TESTING RESULTS: IF YOU COMMENT a-h BELOW OUT, NO OUTPUT, WEIRD...***** Its like a-h never get initially set otherwise even though they should
-                    a <= 32'h6a09e667;
-                    b <= 32'hbb67ae85;
-                    c <= 32'h3c6ef372;
-                    d <= 32'ha54ff53a;
-                    e <= 32'h510e527f;
-                    f <= 32'h9b05688c;
-                    g <= 32'h1f83d9ab;
-                    h <= 32'h5be0cd19;
                           
                     j <= 0;   
                     t <= 0;
@@ -143,27 +131,18 @@ begin
                 state <= STEP2;
             end
                 
-                STEP2: begin
-					     $display("H0-H7 for Block %d is %x %x %x %x %x %x %x %x", curr,h0,h1,h2,h3,h4,h5,h6,h7); 
-                    state <= STEP3;
-                end
+             STEP2: begin
+					  $display("H0-H7 for Block %d is %x %x %x %x %x %x %x %x", curr,h0,h1,h2,h3,h4,h5,h6,h7); 
+                 state <= STEP3;
+             end
                 
             STEP3: begin //reader
-
-                //$display("INPUT DATA");
-                     //$display(mem_addr);
-                //$display(rc);
-                     
-                     //$display("w[0] is %x", w[0]);
-                     
 
                  if (t < 64) begin
                     //$display("heres rc %d",rc);
                     if(t < 16 && rc <= num_words) begin        //we only want to read words we are given, no more make sense?
-//                        if (curr > 0) begin
-//                                    w[0] <= last;
-//                                end
-                                w[t] <= mem_read_data;
+
+                        w[t] <= mem_read_data;
                         state <= STEP1;
                     end
                           
@@ -184,10 +163,10 @@ begin
 										    w[14] <= {1'd1,31'd0};
 										 end
                                 
-                               if (t == 14 && rc == num_words+1 && curr == 2) begin
+                               if (t == 14 && rc == num_words+1 && curr == (num_blocks-1)) begin
                                  w[t] <= {29'd0, size[31:29]};
                                end
-                               else if (t == 15 && rc == num_words+1 && curr == 2) begin
+                               else if (t == 15 && rc == num_words+1 && curr == (num_blocks-1)) begin
                                  w[t] <= {size[28:0], 3'd0};
                                end
                                else begin
@@ -248,30 +227,14 @@ begin
                     w[i] <= 0;
                 end
                      
-                     //NOT SURE IF ABOVE FOR LOOP WORKS HERE, SO DID STATE CALLBACK INSTEAD. GET RID OF IF NOT NEEDED. I think they do the same thing but double check
-//                     if (v < 64) begin
-//                         temp[v] <= w[v];
-//                          w[v] <= 0;
-//                          v <= v+1;
-//                          state <= STEP3;
-//                     end
-//                     
-//                     else begin
-//                        v <= 0;
-//                        state <= STEP4;
-//                     end
 
                 state <= STEP5;
-               end
+               
+					end
                 
                 STEP5: begin
-                    //$display("IN STEP 4");
-                     //$display("DISPLAYING TEMP BLOCK");
-                     for(int i = 0; i < 64; i++) begin
-                    //$display("temp[j]: %h", temp[i]); 
-                     end
 						  
-                    if(j < 64) begin       //*****TESTING REULTS: Changing J from <64 to <60 changes the final hash, so sha256_op is computing something...*****
+                    if(j < 64) begin
                             {a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, temp[j], j);
 									 $display("TESTING A-H");
 									 $display("%x %x %x %x %x %x %x %x %x %d ",temp[j],a,b,c,d,e,f,g,h,j);
@@ -286,8 +249,8 @@ begin
                 STEP6: begin
                 $display("***IN STEP 6***");
 					 curr <= curr + 1;
-					 //$display("H0-H7 for Block %d is %x %x %x %x %x %x %x %x", curr,h0,h1,h2,h3,h4,h5,h6,h7); 
-                if(curr != 3) begin
+					 
+                if(curr != num_blocks) begin
                     
                           
                          $display("ADDING STUFF TO H0-H7");
@@ -393,6 +356,7 @@ begin
                 
                     $display("Printing sha256_digest here");
                      $display("%x", sha256_digest);
+							$display(num_blocks);
                 
                 done <= 1;
                 state <= IDLE;
