@@ -26,7 +26,7 @@ logic    [31:0] num_blocks;
 logic    [31:0] total_length;
 logic    [31:0] last;
 
-
+logic	[1:0] flag;
 
 logic    [31:0] temp[64];
 logic    [15:0] rc, wc; // read and write counters
@@ -108,6 +108,7 @@ begin
                     t <= 0;
                     curr <= 0;
                     mem_we <= 0;
+					flag <= 0;
                     //mem_addr <= message_addr;
                     rc <= 0;
                     deal_first_word <= 0;
@@ -141,40 +142,42 @@ begin
                  if (t < 64) begin
                     //$display("heres rc %d",rc);
                     if(t < 16 && rc <= num_words) begin        //we only want to read words we are given, no more make sense?
-
                         w[t] <= mem_read_data;
                         state <= STEP1;
                     end
                           
                           
-                          else if (rc == num_words + 1) begin
+                    else if (rc == num_words + 1) begin
                                 
-                                case (size % 4)
-                                  0: w[t] <= 32'h80000000;
-                                  1: w[t] <= (mem_read_data & 32'hff000000) | 32'h00800000;
-                                  2: w[t] <= (mem_read_data & 32'hffff0000) | 32'h00008000;
-                                  3: w[t] <= (mem_read_data & 32'hffffff00) | 32'h00000080;
-                                endcase
+                        case (size % 4)
+                            0: w[t] <= 32'h80000000;
+                            1: w[t] <= (mem_read_data & 32'hff000000) | 32'h00800000;
+                            2: w[t] <= (mem_read_data & 32'hffff0000) | 32'h00008000;
+                            3: w[t] <= (mem_read_data & 32'hffffff00) | 32'h00000080;
+                        endcase
 										  
 										  //Add delimiter (after padding last word if necceassry)
-										 $display("T is %d", t);
-										 
-										 if (curr == 1) begin
-										    w[14] <= {1'd1,31'd0};
-										 end
+						$display("T is %d", t);
+						if (flag == 0) begin
+							$display("here is t: %d", t);
+							w[t] <= {1'd1,31'd0};
+							flag <= 1;
+						end
                                 
-                               if (t == 14 && rc == num_words+1 && curr == (num_blocks-1)) begin
-                                 w[t] <= {29'd0, size[31:29]};
-                               end
-                               else if (t == 15 && rc == num_words+1 && curr == (num_blocks-1)) begin
-                                 w[t] <= {size[28:0], 3'd0};
-                               end
-                               else begin
-                                 w[t] <= 32'd0;   //pad with zeros
-                               end
+                        if (t == 14 && rc == num_words+1 && curr == (num_blocks-1) && flag == 1) begin
+                            w[t] <= {29'd0, size[31:29]};
+                        end
+                        else if (t == 15 && rc == num_words+1 && curr == (num_blocks-1) && flag == 1) begin
+                            w[t] <= {size[28:0], 3'd0};
+                        end
+                        else begin
+                            if(flag == 1) begin
+								w[t] <= 32'd0;   //pad with zeros
+							end
+                        end
                                 
                                 
-                          end
+                    end
                             
                           
                     if(t > 15) begin
