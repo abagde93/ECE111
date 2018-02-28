@@ -28,7 +28,7 @@ logic    [31:0] last;
 
 logic	[1:0] flag;
 
-logic    [31:0] temp[64];
+//logic    [31:0] temp[64];
 logic    [15:0] rc, wc; // read and write counters
 
 int pad_length;
@@ -108,7 +108,7 @@ begin
                     t <= 0;
                     curr <= 0;
                     mem_we <= 0;
-					flag <= 0;
+					     flag <= 0;
                     //mem_addr <= message_addr;
                     rc <= 0;
                     deal_first_word <= 0;
@@ -226,8 +226,8 @@ begin
                 
                      //Setting 64 computed w's to temp. Use "temp" for sha256_op fucntion 
                 for(int i = 0; i < 64; i++) begin
-                    temp[i] <= w[i];
-                    w[i] <= 0;
+                    //temp[i] <= w[i];
+                    //w[i] <= 0;
                 end
                      
 
@@ -238,15 +238,17 @@ begin
                 STEP5: begin
 						  
                     if(j < 64) begin
-                            {a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, temp[j], j);
+                            {a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[j], j);
 									 $display("TESTING A-H");
-									 $display("%x %x %x %x %x %x %x %x %x %d ",temp[j],a,b,c,d,e,f,g,h,j);
+									 $display("%x %x %x %x %x %x %x %x %x %d ",w[j],a,b,c,d,e,f,g,h,j);
                             j <= j + 1;
                             state <= STEP5;
                      end else begin
                           j <= 0;
                             state <= STEP6;
                      end
+							
+							
                end
                 
                 STEP6: begin
